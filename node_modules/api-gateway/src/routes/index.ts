@@ -3,6 +3,7 @@ import invoiceRoutes from './invoice.routes';
 import authRoutes from './auth.routes';
 import healthRoutes from './health.routes';
 import customerRoutes from './customer.routes';
+import subscriptionRoutes from './subscription.routes';
 
 // Extend FastifyInstance type with authenticate method
 declare module 'fastify' {
@@ -34,5 +35,6 @@ export default async function routes(fastify: FastifyInstance, _options: Fastify
     instance.addHook('onRequest', fastify.authenticate);
     instance.register(invoiceRoutes, { prefix: '/invoices' });
     instance.register(customerRoutes, { prefix: '/customers' });
+    instance.register(subscriptionRoutes, { prefix: '/subscriptions' });
   });
 }
