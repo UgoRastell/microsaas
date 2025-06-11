@@ -1,0 +1,123 @@
+services:
+  # NATS Server pour la communication entre services
+  nats:
+    image: nats:2.9-alpine
+    command: "--jetstream --store_dir /data -m 8222"
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/varz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # API Gateway - Point d'entrée pour les clients
+  api-gateway:
+    build:
+      context: ./services/api-gateway
+    depends_on:
+      nats:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=production
+      - PORT=8000
+      - HOST=0.0.0.0
+      - NATS_URL=nats://nats:4222
+      - JWT_SECRET=your_jwt_secret_key_here
+      - JWT_EXPIRES=24h
+      - SUPABASE_URL=https://kttyjxnpbvqzdlemfxqt.supabase.co
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - CORS_ORIGIN=http://localhost:3000
+      - RATE_LIMIT_MAX=100
+      - RATE_LIMIT_TIMEWINDOW=60000
+    restart: unless-stopped
+
+  # Service de facturation
+  invoice-svc:
+    build:
+      context: ./services/invoice-svc
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - NATS_URL=nats://nats:4222
+      - SUPABASE_URL=https://kttyjxnpbvqzdlemfxqt.supabase.co
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - PDF_STORAGE_BUCKET=invoices
+      - PDF_STORAGE_PATH=pdfs
+    restart: unless-stopped
+
+  # Service d'email
+  email-svc:
+    build:
+      context: ./services/email-svc
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - NATS_URL=nats://nats:4222
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - FROM_EMAIL=invoices@autoinvoice.app
+      - FROM_NAME=AutoInvoice
+    restart: unless-stopped
+
+  # Service de paiement
+  payment-svc:
+    build:
+      context: ./services/payment-svc
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - NATS_URL=nats://nats:4222
+      - SUPABASE_URL=https://kttyjxnpbvqzdlemfxqt.supabase.co
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - STRIPE_API_KEY=${STRIPE_API_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - PAYMENT_SUCCESS_URL=http://localhost:3000/payment/success
+      - PAYMENT_CANCEL_URL=http://localhost:3000/payment/cancel
+    restart: unless-stopped
+
+  # Service de rappel
+  reminder-svc:
+    build:
+      context: ./services/reminder-svc
+    depends_on:
+      nats:
+        condition: service_healthy
+    environment:
+      - NODE_ENV=production
+      - NATS_URL=nats://nats:4222
+      - SUPABASE_URL=https://kttyjxnpbvqzdlemfxqt.supabase.co
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - REMINDER_CRON=0 10 * * *
+      - REMINDER_FIRST_DAYS=3
+      - REMINDER_SECOND_DAYS=7
+      - REMINDER_THIRD_DAYS=14
+    restart: unless-stopped
+
+  # Frontend web
+  web:
+    build:
+      context: ./apps/web
+    ports:
+      - "3000:3000"
+    depends_on:
+      api-gateway:
+        condition: service_started
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - VITE_SUPABASE_URL=https://kttyjxnpbvqzdlemfxqt.supabase.co
+      - VITE_SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+    restart: unless-stopped
+
+volumes:
+  nats_data:

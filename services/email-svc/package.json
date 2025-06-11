@@ -1,0 +1,28 @@
+{
+  "name": "email-svc",
+  "version": "1.0.0",
+  "description": "Email microservice for AutoInvoice",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "handlebars": "^4.7.8",
+    "nats": "^2.17.0",
+    "pino": "^8.16.0",
+    "pino-pretty": "^10.2.3",
+    "resend": "^2.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.10",
+    "@typescript-eslint/eslint-plugin": "^6.9.1",
+    "@typescript-eslint/parser": "^6.9.1",
+    "eslint": "^8.53.0",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.2.2"
+  }
+}
