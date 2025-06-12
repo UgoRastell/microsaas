@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "chmod -R +x node_modules/.bin && npm run build",
+  "buildCommand": "cd apps/web && npm run build",
   "outputDirectory": "apps/web/dist",
   "installCommand": "npm install",
   "framework": "vite",
