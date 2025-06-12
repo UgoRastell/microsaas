@@ -135,6 +135,7 @@ const Settings = () => {
         .from('profiles')
         .upsert({
           id: user.id,
+          email: formData.email, // Ajouter l'email pour respecter la contrainte NOT NULL
           first_name: formData.first_name,
           last_name: formData.last_name,
           organization_id: formData.organization_id,
