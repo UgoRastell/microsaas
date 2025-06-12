@@ -6,9 +6,12 @@ import toast from 'react-hot-toast'
 interface UserProfile {
   id: string
   email: string
-  full_name?: string
-  company?: string
-  phone?: string
+  first_name?: string
+  last_name?: string
+  organization_id?: string
+  avatar_url?: string
+  settings?: any
+  role?: string
 }
 
 interface NotificationSettings {
@@ -32,9 +35,9 @@ const Settings = () => {
 
   // Champs du formulaire de profil
   const [formData, setFormData] = useState({
-    full_name: '',
-    company: '',
-    phone: '',
+    first_name: '',
+    last_name: '',
+    organization_id: '',
     email: ''
   })
 
@@ -64,9 +67,9 @@ const Settings = () => {
       if (data) {
         setProfile(data)
         setFormData({
-          full_name: data.full_name || '',
-          company: data.company || '',
-          phone: data.phone || '',
+          first_name: data.first_name || '',
+          last_name: data.last_name || '',
+          organization_id: data.organization_id || '',
           email: user.email || ''
         })
       } else {
@@ -77,12 +80,13 @@ const Settings = () => {
       }
 
       // Charger les préférences de notification (exemple)
-      // Dans un cas réel, vous auriez une table séparée pour cela
-      // Cette partie est simulée pour l'exemple
+      // Cette partie est simulée car ces données ne sont pas dans le schéma
+      // Dans un cas réel, vous stockeriez ces préférences dans le champ settings
+      const notificationSettings = data?.settings?.notifications || {};
       setNotifications({
-        email_invoices: true,
-        email_reminders: data?.notifications_enabled ?? false,
-        email_marketing: false
+        email_invoices: notificationSettings.email_invoices || true,
+        email_reminders: notificationSettings.email_reminders || false,
+        email_marketing: notificationSettings.email_marketing || false
       })
     } catch (error) {
       console.error('Erreur lors du chargement du profil:', error)
@@ -116,15 +120,25 @@ const Settings = () => {
     try {
       setUpdating(true)
 
+      // Préparation des settings avec les préférences de notification
+      const settings = {
+        ...profile?.settings,
+        notifications: {
+          email_invoices: notifications.email_invoices,
+          email_reminders: notifications.email_reminders,
+          email_marketing: notifications.email_marketing
+        }
+      };
+
       // Mettre à jour le profil
       const { error } = await supabase
         .from('profiles')
         .upsert({
           id: user.id,
-          full_name: formData.full_name,
-          company: formData.company,
-          phone: formData.phone,
-          notifications_enabled: notifications.email_reminders,
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          organization_id: formData.organization_id,
+          settings: settings,
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'id'
@@ -135,7 +149,7 @@ const Settings = () => {
       toast.success('Paramètres mis à jour avec succès')
     } catch (error) {
       console.error('Erreur lors de la mise à jour du profil:', error)
-      toast.error('Erreur lors de la mise à jour des paramètres')
+      toast.error('Erreur lors de la mise à jour du profil')
     } finally {
       setUpdating(false)
     }
@@ -190,46 +204,46 @@ const Settings = () => {
                       <p className="mt-1 text-xs text-gray-500">Pour changer votre email, contactez le support.</p>
                     </div>
 
-                    {/* Nom complet */}
+                    {/* Prénom */}
                     <div>
-                      <label htmlFor="full_name" className="block text-sm font-medium text-gray-700">
-                        Nom complet
+                      <label htmlFor="first_name" className="block text-sm font-medium text-gray-700">
+                        Prénom
                       </label>
                       <input
                         type="text"
-                        name="full_name"
-                        id="full_name"
-                        value={formData.full_name}
+                        name="first_name"
+                        id="first_name"
+                        value={formData.first_name}
                         onChange={handleInputChange}
                         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                       />
                     </div>
 
-                    {/* Entreprise */}
+                    {/* Nom */}
                     <div>
-                      <label htmlFor="company" className="block text-sm font-medium text-gray-700">
-                        Entreprise
+                      <label htmlFor="last_name" className="block text-sm font-medium text-gray-700">
+                        Nom
                       </label>
                       <input
                         type="text"
-                        name="company"
-                        id="company"
-                        value={formData.company}
+                        name="last_name"
+                        id="last_name"
+                        value={formData.last_name}
                         onChange={handleInputChange}
                         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                       />
                     </div>
 
-                    {/* Téléphone */}
+                    {/* Organisation */}
                     <div>
-                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                        Téléphone
+                      <label htmlFor="organization_id" className="block text-sm font-medium text-gray-700">
+                        Organisation
                       </label>
                       <input
-                        type="tel"
-                        name="phone"
-                        id="phone"
-                        value={formData.phone}
+                        type="text"
+                        name="organization_id"
+                        id="organization_id"
+                        value={formData.organization_id}
                         onChange={handleInputChange}
                         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                       />
