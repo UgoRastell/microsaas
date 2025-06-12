@@ -1,7 +1,7 @@
 {
   "version": 2,
   "framework": "vite",
-  "buildCommand": "npm run build",
+  "buildCommand": "chmod -R +x node_modules/.bin && vite build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
   "rewrites": [
