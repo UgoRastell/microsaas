@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useSupabaseClient, useUser, useSession } from '@supabase/auth-helpers-react'
 import toast from 'react-hot-toast'
-import subscriptionService, { Subscription } from '../services/subscription-service'
 
 // Types pour nos données
 type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue'
@@ -42,9 +41,7 @@ const Dashboard = () => {
     overdue: 0,
     pending: 0
   })
-  const [subscription, setSubscription] = useState<Subscription | null>(null)
   const [loading, setLoading] = useState(true)
-  const [subscriptionLoading, setSubscriptionLoading] = useState(true)
 
   // Fonction pour charger les factures récentes
   const loadRecentInvoices = async () => {
@@ -91,53 +88,9 @@ const Dashboard = () => {
     }
   }
 
-  // Charger l'abonnement actuel
-  const loadSubscription = async () => {
-    if (!session) return;
-    
-    try {
-      setSubscriptionLoading(true);
-      const currentSubscription = await subscriptionService.getCurrentSubscription(session);
-      
-      if (currentSubscription === null) {
-        // Si null est retourné, cela peut être car l'utilisateur n'a pas d'abonnement
-        // ou qu'il y a eu une erreur silencieuse dans le service
-        setSubscription(null);
-        // Pas de message d'erreur pour ne pas pénaliser les nouveaux utilisateurs
-        return;
-      }
-      
-      setSubscription(currentSubscription);
-      
-      // Afficher une notification si l'abonnement est annulé ou presque expiré
-      if (currentSubscription.status === 'canceled') {
-        toast.error('Votre abonnement a été annulé', { duration: 5000 });
-      } else if (currentSubscription.invoice_limit && 
-                (currentSubscription.invoice_usage / currentSubscription.invoice_limit) > 0.9) {
-        toast('Vous approchez de votre limite de factures', { 
-          duration: 5000,
-          icon: '⚠️',
-          style: {
-            background: '#FEF3C7',
-            color: '#92400E'
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Erreur lors du chargement de l\'abonnement:', error);
-      // Afficher une notification d'erreur plus générale
-      toast.error('Un problème est survenu lors du chargement de votre abonnement. Veuillez réessayer plus tard.', {
-        duration: 5000
-      });
-    } finally {
-      setSubscriptionLoading(false);
-    }
-  };
-  
   useEffect(() => {
     if (session) {
-      loadRecentInvoices();
-      loadSubscription();
+      loadRecentInvoices()
     }
   }, [session])
 
@@ -181,89 +134,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Subscription summary */}
-      {subscription && (
-        <div className="bg-white overflow-hidden shadow rounded-lg mb-8">
-          <div className="px-4 py-5 sm:p-6">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-lg leading-6 font-medium text-gray-900">
-                Votre abonnement
-              </h3>
-              <div className="space-x-4">
-                <Link to="/plans" className="text-sm text-blue-600 hover:text-blue-800">
-                  Changer de plan
-                </Link>
-                <Link to="/settings" className="text-sm text-blue-600 hover:text-blue-800">
-                  Gérer l'abonnement
-                </Link>
-              </div>
-            </div>
-            <div className="flex gap-4 flex-wrap">
-              <div className="flex-1 min-w-[200px]">
-                <p className="mb-2 text-sm font-medium text-gray-500">Plan actuel</p>
-                <p className="text-xl font-bold">
-                  {subscription?.plan_type === 'freemium' ? 'Freemium' :
-                   subscription?.plan_type === 'standard' ? 'Standard' :
-                   subscription?.plan_type === 'premium' ? 'Premium' : 'Inconnu'}
-                </p>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${subscription?.status === 'active' ? 'bg-green-100 text-green-800' : 
-                    subscription?.status === 'canceled' ? 'bg-red-100 text-red-800' : 
-                    subscription?.status === 'trialing' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                  {subscription?.status === 'active' ? 'Actif' :
-                   subscription?.status === 'canceled' ? 'Annulé' :
-                   subscription?.status === 'trialing' ? 'Période d\'essai' : subscription?.status}
-                </span>
-              </div>
-              
-              <div className="flex-1 min-w-[200px]">
-                <p className="mb-2 text-sm font-medium text-gray-500">Utilisation des factures</p>
-                <p className="text-xl font-bold">
-                  {subscription?.invoice_usage || 0} 
-                  {subscription?.invoice_limit ? 
-                    <span className="text-gray-500 text-sm font-normal"> / {subscription.invoice_limit}</span> : 
-                    <span className="text-gray-500 text-sm font-normal"> / Illimité</span>}
-                </p>
-                
-                {subscription?.invoice_limit && (
-                  <div className="mt-2">
-                    <div className="w-full bg-gray-200 rounded-full h-2.5">
-                      <div 
-                        className={`h-2.5 rounded-full ${subscription.invoice_usage / subscription.invoice_limit > 0.9 ? 'bg-red-600' : 
-                        subscription.invoice_usage / subscription.invoice_limit > 0.7 ? 'bg-yellow-400' : 'bg-blue-600'}`} 
-                        style={{ width: `${Math.min(100, (subscription.invoice_usage / subscription.invoice_limit) * 100)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              
-              <div className="flex-1 min-w-[200px]">
-                <p className="mb-2 text-sm font-medium text-gray-500">Prochain renouvellement</p>
-                <p className="text-xl font-bold">
-                  {subscription?.current_period_end ? formatDate(subscription.current_period_end) : 'N/A'}
-                </p>
-              </div>
-            </div>
-            
-            {subscription?.invoice_limit && subscription.invoice_usage / subscription.invoice_limit > 0.8 && (
-              <div className="mt-4 bg-yellow-50 border-l-4 border-yellow-400 p-4">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm text-yellow-700">
-                      Vous approchez de votre limite de factures. <Link to="/plans" className="font-medium underline text-yellow-700 hover:text-yellow-600">Passez à un plan supérieur</Link> pour augmenter votre limite.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Section principale */}
       
       {/* Stats */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4 mb-8">

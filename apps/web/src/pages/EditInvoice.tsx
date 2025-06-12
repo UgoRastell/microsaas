@@ -11,6 +11,8 @@ interface Customer {
   vat: string | null
 }
 
+type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue'
+
 interface InvoiceItem {
   id?: string
   description: string
@@ -22,7 +24,7 @@ interface InvoiceItem {
 interface InvoiceFormData {
   customer_id: string
   due_date: string
-  status: string
+  status: InvoiceStatus
   notes: string
   items: InvoiceItem[]
 }
@@ -273,9 +275,10 @@ const EditInvoice = () => {
                   className="form-select"
                   {...register('status', { required: 'Le statut est requis' })}
                 >
-                  <option value="En attente">En attente</option>
-                  <option value="Payée">Payée</option>
-                  <option value="Annulée">Annulée</option>
+                  <option value="draft">Brouillon</option>
+                  <option value="sent">Envoyée</option>
+                  <option value="paid">Payée</option>
+                  <option value="overdue">En retard</option>
                 </select>
                 {errors.status && (
                   <p className="text-red-500 text-xs mt-1">

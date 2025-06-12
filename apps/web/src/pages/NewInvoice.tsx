@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSupabaseClient } from '@supabase/auth-helpers-react'
+import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react'
 
 // Types nécessaires pour la gestion des factures
 type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue'
@@ -19,6 +19,7 @@ interface InvoiceItem {
 const NewInvoice = () => {
   const navigate = useNavigate()
   const supabase = useSupabaseClient()
+  const user = useUser()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [items, setItems] = useState<InvoiceItem[]>([{ description: '', quantity: 1, price: 0 }])
@@ -99,6 +100,11 @@ const NewInvoice = () => {
       alert("Veuillez sélectionner un client")
       return
     }
+
+    if (!user) {
+      alert("Vous devez être connecté pour créer une facture")
+      return
+    }
     
     setIsSubmitting(true)
     
@@ -123,7 +129,8 @@ const NewInvoice = () => {
             status: formData.status,
             total: calculateTotal(),
             notes: formData.notes,
-            number: nextInvoiceNumber
+            number: nextInvoiceNumber,
+            user_id: user.id
           }
         ])
         .select()

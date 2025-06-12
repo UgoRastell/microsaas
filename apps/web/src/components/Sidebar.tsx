@@ -19,7 +19,6 @@ const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: HomeIcon },
   { name: 'Clients', href: '/customers', icon: UserGroupIcon },
   { name: 'Factures', href: '/invoices', icon: DocumentTextIcon },
-  { name: 'Plans', href: '/plans', icon: CreditCardIcon },
   { name: 'Paramètres', href: '/settings', icon: Cog6ToothIcon },
 ]
 

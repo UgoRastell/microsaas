@@ -13,8 +13,6 @@ import NewInvoice from './pages/NewInvoice'
 import ViewInvoice from './pages/ViewInvoice'
 import EditInvoice from './pages/EditInvoice'
 import Settings from './pages/Settings'
-import Plans from './pages/Plans'
-import PaymentSuccess from './pages/PaymentSuccess'
 import NotFound from './pages/NotFound'
 import ResetPassword from './pages/ResetPassword'
 
@@ -78,8 +76,6 @@ function App() {
             <Route path="/invoices/:id" element={<ViewInvoice />} />
             <Route path="/invoices/:id/edit" element={<EditInvoice />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/plans" element={<Plans />} />
-            <Route path="/payment-success" element={<PaymentSuccess />} />
           </Route>
         </Route>
         

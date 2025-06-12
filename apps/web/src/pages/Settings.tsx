@@ -1,197 +1,146 @@
 import React, { useState, useEffect } from 'react'
-import { useSupabaseClient, useUser, useSession } from '@supabase/auth-helpers-react'
-import { useForm } from 'react-hook-form'
-import { Link } from 'react-router-dom'
+import { useSupabaseClient, useUser } from '@supabase/auth-helpers-react'
+import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import subscriptionService, { Subscription } from '../services/subscription-service'
 
-// Types pour le formulaire et abonnements
-interface ProfileFormData {
-  fullName: string
-  company: string
-  address: string
-  postalCode: string
-  city: string
-  country: string
-  phone: string
-  taxNumber: string
-  bankName: string
-  iban: string
-  bic: string
+interface UserProfile {
+  id: string
+  email: string
+  full_name?: string
+  company?: string
+  phone?: string
+}
+
+interface NotificationSettings {
+  email_invoices: boolean
+  email_reminders: boolean
+  email_marketing: boolean
 }
 
 const Settings = () => {
   const supabase = useSupabaseClient()
   const user = useUser()
-  const session = useSession()
-  const [loading, setLoading] = useState(false)
-  const [saveSuccess, setSaveSuccess] = useState(false)
-  const [subscription, setSubscription] = useState<Subscription | null>(null)
-  const [loadingSubscription, setLoadingSubscription] = useState(false)
-  const [upgradingPlan, setUpgradingPlan] = useState(false)
-  const [cancelingSubscription, setCancelingSubscription] = useState(false)
-  
-  // React Hook Form
-  const { register, handleSubmit, reset, formState: { errors } } = useForm<ProfileFormData>()
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
+  const [updating, setUpdating] = useState(false)
+  const [profile, setProfile] = useState<UserProfile | null>(null)
+  const [notifications, setNotifications] = useState<NotificationSettings>({
+    email_invoices: true,
+    email_reminders: false,
+    email_marketing: false
+  })
 
-  // Chargement du profil utilisateur
-  const loadProfile = async () => {
-    if (!user) return
-    
-    setLoading(true)
+  // Champs du formulaire de profil
+  const [formData, setFormData] = useState({
+    full_name: '',
+    company: '',
+    phone: '',
+    email: ''
+  })
+
+  useEffect(() => {
+    if (user) {
+      loadUserProfile()
+    }
+  }, [user])
+
+  const loadUserProfile = async () => {
     try {
+      setLoading(true)
+      
+      if (!user) return
+
+      // Charger le profil de l'utilisateur
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', user.id)
         .single()
-      
+
       if (error && error.code !== 'PGRST116') {
         throw error
       }
-      
+
       if (data) {
-        // Remplissage du formulaire avec les données existantes
-        reset({
-          fullName: data.full_name || '',
+        setProfile(data)
+        setFormData({
+          full_name: data.full_name || '',
           company: data.company || '',
-          address: data.address || '',
-          postalCode: data.postal_code || '',
-          city: data.city || '',
-          country: data.country || '',
           phone: data.phone || '',
-          taxNumber: data.tax_number || '',
-          bankName: data.bank_name || '',
-          iban: data.iban || '',
-          bic: data.bic || ''
+          email: user.email || ''
+        })
+      } else {
+        setFormData({
+          ...formData,
+          email: user.email || ''
         })
       }
+
+      // Charger les préférences de notification (exemple)
+      // Dans un cas réel, vous auriez une table séparée pour cela
+      // Cette partie est simulée pour l'exemple
+      setNotifications({
+        email_invoices: true,
+        email_reminders: data?.notifications_enabled ?? false,
+        email_marketing: false
+      })
     } catch (error) {
       console.error('Erreur lors du chargement du profil:', error)
+      toast.error('Impossible de charger votre profil')
     } finally {
       setLoading(false)
     }
   }
 
-  // Chargement de l'abonnement actuel
-  const loadSubscription = async () => {
-    if (!session) return
-    
-    setLoadingSubscription(true)
-    try {
-      const currentSubscription = await subscriptionService.getCurrentSubscription(session)
-      setSubscription(currentSubscription)
-    } catch (error) {
-      console.error('Erreur lors du chargement de l\'abonnement:', error)
-      toast.error('Impossible de charger votre abonnement')
-    } finally {
-      setLoadingSubscription(false)
-    }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target
+    setFormData({
+      ...formData,
+      [name]: value
+    })
   }
 
-  // Initialiser l'upgrade d'un abonnement
-  const initiatePlanUpgrade = async (planId: string) => {
-    if (!session) return
-    
-    // Confirmation pour plan Freemium
-    if (planId === 'freemium' && !confirm('Voulez-vous activer le plan Freemium ?')) {
-      return
-    }
-    
-    const toastId = toast.loading('Préparation du changement de plan...')
-    setUpgradingPlan(true)
-    
-    try {
-      // Si c'est un plan freemium, pas besoin de Stripe checkout
-      if (planId === 'freemium') {
-        await subscriptionService.createCheckoutSession(planId, session)
-        toast.success('Plan Freemium activé avec succès!')
-        await loadSubscription() // Recharger l'abonnement
-      } else {
-        // Pour les plans payants, redirection vers Stripe
-        const checkoutUrl = await subscriptionService.createCheckoutSession(planId, session)
-        toast.dismiss(toastId)
-        window.location.href = checkoutUrl
-        return // Ne pas exécuter le dismiss après redirection
-      }
-    } catch (error) {
-      console.error('Erreur lors du changement de plan:', error)
-      toast.error('Une erreur est survenue. Veuillez réessayer.')
-    } finally {
-      setUpgradingPlan(false)
-      toast.dismiss(toastId)
-    }
+  const handleNotificationChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, checked } = e.target
+    setNotifications({
+      ...notifications,
+      [name]: checked
+    })
   }
-  
-  // Annuler un abonnement
-  const cancelSubscription = async () => {
-    if (!session || !subscription) return
-    
-    if (!confirm('Êtes-vous sûr de vouloir annuler votre abonnement ? Cette action est irréversible.')) {
-      return
-    }
-    
-    setCancelingSubscription(true)
-    const toastId = toast.loading('Annulation de votre abonnement en cours...')
-    
-    try {
-      await subscriptionService.cancelSubscription(session)
-      toast.success('Votre abonnement a été annulé')
-      await loadSubscription() // Recharger l'abonnement
-    } catch (error) {
-      console.error('Erreur lors de l\'annulation:', error)
-      toast.error('Une erreur est survenue lors de l\'annulation')
-    } finally {
-      setCancelingSubscription(false)
-      toast.dismiss(toastId)
-    }
-  }
-  
-  useEffect(() => {
-    if (session) {
-      loadProfile()
-      loadSubscription()
-    }
-  }, [session])
 
-  // Soumission du formulaire
-  const onSubmit = async (data: ProfileFormData) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
     if (!user) return
     
-    setLoading(true)
-    setSaveSuccess(false)
-    
     try {
+      setUpdating(true)
+
+      // Mettre à jour le profil
       const { error } = await supabase
         .from('profiles')
         .upsert({
-          user_id: user.id,
-          full_name: data.fullName,
-          company: data.company,
-          address: data.address,
-          postal_code: data.postalCode,
-          city: data.city,
-          country: data.country,
-          phone: data.phone,
-          tax_number: data.taxNumber,
-          bank_name: data.bankName,
-          iban: data.iban,
-          bic: data.bic,
+          id: user.id,
+          full_name: formData.full_name,
+          company: formData.company,
+          phone: formData.phone,
+          notifications_enabled: notifications.email_reminders,
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'id'
         })
-      
+
       if (error) throw error
       
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 3000)
+      toast.success('Paramètres mis à jour avec succès')
     } catch (error) {
-      console.error('Erreur lors de la sauvegarde du profil:', error)
-      alert('Une erreur est survenue lors de la sauvegarde. Veuillez réessayer.')
+      console.error('Erreur lors de la mise à jour du profil:', error)
+      toast.error('Erreur lors de la mise à jour des paramètres')
     } finally {
-      setLoading(false)
+      setUpdating(false)
     }
   }
-
+  
   return (
     <div className="container mx-auto max-w-7xl">
       <div className="md:flex md:items-center md:justify-between mb-6">
@@ -202,360 +151,204 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* Section Abonnements */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-8">
-        <div className="px-4 py-5 sm:px-6">
-          <h2 className="text-lg leading-6 font-medium text-gray-900">
-            Abonnement et Facturation
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            Gérez votre abonnement et consultez votre utilisation.
-          </p>
+      {/* Affichage du chargement */}
+      {loading ? (
+        <div className="py-10 text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-3 text-gray-500">Chargement de vos paramètres...</p>
         </div>
-        <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
-          {loadingSubscription ? (
-            <div className="py-6 text-center">
-              <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-              <p className="mt-2 text-gray-500">Chargement de votre abonnement...</p>
-            </div>
-          ) : subscription ? (
-            <div>
-              <div className="flex flex-col md:flex-row md:justify-between md:items-center">
-                <div>
-                  <h3 className="text-xl font-semibold text-gray-800">
-                    Plan {subscription.plan_type === 'freemium' ? 'Freemium' : 
-                          subscription.plan_type === 'standard' ? 'Standard' : 'Premium'}
-                  </h3>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Statut: <span className={`font-semibold ${subscription.status === 'active' ? 'text-green-600' : 
-                                              subscription.status === 'canceled' ? 'text-red-600' : 'text-orange-600'}`}>
-                      {subscription.status === 'active' ? 'Actif' : 
-                       subscription.status === 'canceled' ? 'Annulé' : 
-                       subscription.status === 'trialing' ? 'Période d\'essai' : subscription.status}
-                    </span>
-                  </p>
-                </div>
-                
-                {subscription.plan_type !== 'premium' && (
-                  <div className="mt-4 md:mt-0">
+      ) : (
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+          {/* Section principale - informations de profil */}
+          <div className="lg:col-span-2">
+            <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+              <div className="px-4 py-5 sm:px-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Informations de profil
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500">
+                  Gérez vos informations personnelles et professionnelles
+                </p>
+              </div>
+              
+              <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
+                <form onSubmit={handleSubmit}>
+                  <div className="space-y-6">
+                    {/* Email (lecture seule) */}
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                        Adresse email
+                      </label>
+                      <input
+                        type="email"
+                        name="email"
+                        id="email"
+                        value={formData.email}
+                        readOnly
+                        className="mt-1 block w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm py-2 px-3 text-gray-500 sm:text-sm"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">Pour changer votre email, contactez le support.</p>
+                    </div>
+
+                    {/* Nom complet */}
+                    <div>
+                      <label htmlFor="full_name" className="block text-sm font-medium text-gray-700">
+                        Nom complet
+                      </label>
+                      <input
+                        type="text"
+                        name="full_name"
+                        id="full_name"
+                        value={formData.full_name}
+                        onChange={handleInputChange}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+
+                    {/* Entreprise */}
+                    <div>
+                      <label htmlFor="company" className="block text-sm font-medium text-gray-700">
+                        Entreprise
+                      </label>
+                      <input
+                        type="text"
+                        name="company"
+                        id="company"
+                        value={formData.company}
+                        onChange={handleInputChange}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+
+                    {/* Téléphone */}
+                    <div>
+                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                        Téléphone
+                      </label>
+                      <input
+                        type="tel"
+                        name="phone"
+                        id="phone"
+                        value={formData.phone}
+                        onChange={handleInputChange}
+                        className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="mt-6">
                     <button
-                      onClick={() => initiatePlanUpgrade(subscription.plan_type === 'freemium' ? 'standard' : 'premium')}
-                      disabled={upgradingPlan}
-                      className="btn btn-primary"
+                      type="submit"
+                      disabled={updating}
+                      className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {upgradingPlan ? 'En cours...' : `Passer au plan ${subscription.plan_type === 'freemium' ? 'Standard' : 'Premium'}`}
+                      {updating ? 'Enregistrement...' : 'Enregistrer les modifications'}
                     </button>
                   </div>
-                )}
+                </form>
               </div>
-              
-              <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-gray-700">Facturation</h4>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Prochain renouvellement: {subscription.current_period_end ? 
-                      new Date(subscription.current_period_end).toLocaleDateString('fr-FR') : 'N/A'}
-                  </p>
-                </div>
-                
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-gray-700">Utilisation</h4>
-                  <div className="mt-1 flex items-center">
-                    <div className="flex-1">
-                      <div className="bg-gray-200 rounded-full h-2.5 w-full">
-                        <div className={`h-2.5 rounded-full ${
-                  subscription.invoice_limit === null ? 'bg-blue-600' : 
-                  (subscription.invoice_usage / subscription.invoice_limit) > 0.9 ? 'bg-red-600' : 
-                  (subscription.invoice_usage / subscription.invoice_limit) > 0.7 ? 'bg-yellow-500' : 
-                  'bg-blue-600'}`} 
-                     style={{ width: `${
-                       subscription.invoice_limit === null ? 50 : 
-                       (subscription.invoice_usage / subscription.invoice_limit) * 100
-                     }%` }}>
-                        </div>
-                      </div>
+            </div>
+          </div>
+
+          {/* Section latérale - paramètres de notification et sécurité */}
+          <div>
+            {/* Préférences de notification */}
+            <div className="bg-white shadow overflow-hidden sm:rounded-lg mb-6">
+              <div className="px-4 py-5 sm:px-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Préférences de notification
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500">
+                  Gérez vos préférences de notification par email
+                </p>
+              </div>
+              <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
+                <div className="space-y-4">
+                  <div className="flex items-start">
+                    <div className="flex items-center h-5">
+                      <input
+                        id="email_invoices"
+                        name="email_invoices"
+                        type="checkbox"
+                        checked={notifications.email_invoices}
+                        onChange={handleNotificationChange}
+                        className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      />
                     </div>
-                    <span className="ml-2 text-sm text-gray-700">
-                      {subscription.invoice_usage} / {subscription.invoice_limit || 'Illimité'}
-                    </span>
+                    <div className="ml-3 text-sm">
+                      <label htmlFor="email_invoices" className="font-medium text-gray-700">Factures</label>
+                      <p className="text-gray-500">Recevoir des notifications par email pour les nouvelles factures.</p>
+                    </div>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Factures utilisées ce mois-ci
-                  </p>
-                </div>
-                
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <h4 className="font-medium text-gray-700">Historique</h4>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Abonné depuis: {subscription.start_date ? 
-                      new Date(subscription.start_date).toLocaleDateString('fr-FR') : 'N/A'}
-                  </p>
+                  <div className="flex items-start">
+                    <div className="flex items-center h-5">
+                      <input
+                        id="email_reminders"
+                        name="email_reminders"
+                        type="checkbox"
+                        checked={notifications.email_reminders}
+                        onChange={handleNotificationChange}
+                        className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      />
+                    </div>
+                    <div className="ml-3 text-sm">
+                      <label htmlFor="email_reminders" className="font-medium text-gray-700">Rappels</label>
+                      <p className="text-gray-500">Recevoir des rappels pour les factures impayées.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start">
+                    <div className="flex items-center h-5">
+                      <input
+                        id="email_marketing"
+                        name="email_marketing"
+                        type="checkbox"
+                        checked={notifications.email_marketing}
+                        onChange={handleNotificationChange}
+                        className="focus:ring-blue-500 h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      />
+                    </div>
+                    <div className="ml-3 text-sm">
+                      <label htmlFor="email_marketing" className="font-medium text-gray-700">Marketing</label>
+                      <p className="text-gray-500">Recevoir des actualités et offres promotionnelles.</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-              
-              {subscription.plan_type !== 'freemium' && (
-                <div className="mt-6 text-right">
+            </div>
+
+            {/* Sécurité */}
+            <div className="bg-white shadow overflow-hidden sm:rounded-lg">
+              <div className="px-4 py-5 sm:px-6">
+                <h3 className="text-lg leading-6 font-medium text-gray-900">
+                  Sécurité
+                </h3>
+                <p className="mt-1 max-w-2xl text-sm text-gray-500">
+                  Gérez vos paramètres de sécurité
+                </p>
+              </div>
+              <div className="border-t border-gray-200 px-4 py-5 sm:p-6">
+                <div className="space-y-4">
                   <button
-                    className="text-sm text-red-600 hover:text-red-800"
-                    onClick={cancelSubscription}
-                    disabled={cancelingSubscription || subscription.status === 'canceled'}
+                    type="button"
+                    onClick={() => navigate('/reset-password')}
+                    className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                   >
-                    {cancelingSubscription ? 'Annulation en cours...' : 
-                     subscription.status === 'canceled' ? 'Abonnement déjà annulé' : 
-                     'Annuler l\'abonnement'}
+                    Changer de mot de passe
                   </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="py-6 text-center">
-              <p className="text-gray-600">Vous n'avez pas encore d'abonnement actif.</p>
-              <div className="mt-4">
-                <button
-                  onClick={() => initiatePlanUpgrade('freemium')}
-                  className="btn btn-primary"
-                  disabled={upgradingPlan}
-                >
-                  {upgradingPlan ? 'En cours...' : 'Activer le plan Freemium'}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-      
-      {/* Section Informations de facturation */}
-      <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-        <div className="px-4 py-5 sm:px-6">
-          <h2 className="text-lg leading-6 font-medium text-gray-900">
-            Informations de facturation
-          </h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
-            Ces informations apparaîtront sur vos factures.
-          </p>
-        </div>
-        <div className="border-t border-gray-200 px-4 py-5 sm:px-6">
-          {loading && !user ? (
-            <div className="py-10 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
-              <p className="mt-3 text-gray-500">Chargement des paramètres...</p>
-            </div>
-          ) : (
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-              {/* Message de succès */}
-              {saveSuccess && (
-                <div className="rounded-md bg-green-50 p-4">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <svg className="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                      </svg>
-                    </div>
-                    <div className="ml-3">
-                      <p className="text-sm font-medium text-green-800">
-                        Vos paramètres ont été enregistrés avec succès.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
-                <div className="sm:col-span-3">
-                  <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
-                    Nom complet
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="fullName"
-                      className="input"
-                      {...register('fullName', { required: "Le nom est requis" })}
-                    />
-                    {errors.fullName && (
-                      <p className="mt-1 text-sm text-red-600">{errors.fullName.message}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label htmlFor="company" className="block text-sm font-medium text-gray-700">
-                    Entreprise
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="company"
-                      className="input"
-                      {...register('company')}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-6">
-                  <label htmlFor="address" className="block text-sm font-medium text-gray-700">
-                    Adresse
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="address"
-                      className="input"
-                      {...register('address')}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label htmlFor="postalCode" className="block text-sm font-medium text-gray-700">
-                    Code postal
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="postalCode"
-                      className="input"
-                      {...register('postalCode')}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label htmlFor="city" className="block text-sm font-medium text-gray-700">
-                    Ville
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="city"
-                      className="input"
-                      {...register('city')}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label htmlFor="country" className="block text-sm font-medium text-gray-700">
-                    Pays
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="country"
-                      className="input"
-                      {...register('country')}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                    Téléphone
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="phone"
-                      className="input"
-                      {...register('phone')}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label htmlFor="taxNumber" className="block text-sm font-medium text-gray-700">
-                    Numéro de TVA
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="taxNumber"
-                      className="input"
-                      {...register('taxNumber')}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-6">
-                  <h3 className="text-lg font-medium text-gray-900">Informations bancaires</h3>
-                  <p className="text-sm text-gray-500">
-                    Ces informations apparaîtront sur vos factures pour recevoir les paiements.
-                  </p>
-                </div>
-
-                <div className="sm:col-span-2">
-                  <label htmlFor="bankName" className="block text-sm font-medium text-gray-700">
-                    Banque
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="bankName"
-                      className="input"
-                      {...register('bankName')}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-3">
-                  <label htmlFor="iban" className="block text-sm font-medium text-gray-700">
-                    IBAN
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="iban"
-                      className="input"
-                      {...register('iban')}
-                    />
-                  </div>
-                </div>
-
-                <div className="sm:col-span-1">
-                  <label htmlFor="bic" className="block text-sm font-medium text-gray-700">
-                    BIC
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      type="text"
-                      id="bic"
-                      className="input"
-                      {...register('bic')}
-                    />
+                  
+                  <div>
+                    <p className="text-sm text-gray-500 mt-2">
+                      Pour des raisons de sécurité, nous vous recommandons de changer régulièrement votre mot de passe.
+                    </p>
                   </div>
                 </div>
               </div>
-
-              <div className="flex justify-end">
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={loading}
-                >
-                  {loading ? 'Enregistrement...' : 'Enregistrer'}
-                </button>
-              </div>
-            </form>
-          )}
+            </div>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
-}
-
-// Utilitaires pour l'affichage de l'abonnement
-function getUtilizationPercentage(subscription: Subscription): number {
-  if (!subscription.invoice_limit) return 0;
-  return Math.min(100, Math.round((subscription.invoice_usage / subscription.invoice_limit) * 100));
-}
-
-function getUtilizationColorClass(subscription: Subscription): string {
-  if (!subscription.invoice_limit) return 'bg-blue-500';
-  
-  const percentage = getUtilizationPercentage(subscription);
-  if (percentage < 70) return 'bg-green-500';
-  if (percentage < 90) return 'bg-yellow-500';
-  return 'bg-red-500';
 }
 
 export default Settings
