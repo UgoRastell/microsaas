@@ -1,7 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useSupabaseClient } from '@supabase/auth-helpers-react'
-import { useNavigate, Link } from 'react-router-dom'
-import subscriptionService from '../services/subscription-service'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
 
 const Login = () => {
   const [email, setEmail] = useState('')
@@ -11,9 +10,56 @@ const Login = () => {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<'login' | 'signup' | 'forgot'>('login')
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null)
   
   const supabase = useSupabaseClient()
   const navigate = useNavigate()
+  const location = useLocation()
+
+  // Gérer les redirections Supabase pour la vérification d'email
+  useEffect(() => {
+    // Vérifier si l'URL contient un hash avec un access_token (cas de vérification d'email)
+    const handleHashChange = async () => {
+      const hash = window.location.hash
+      if (hash && hash.includes('access_token')) {
+        setLoading(true)
+        
+        try {
+          // Extraire le token de l'URL
+          const accessToken = new URLSearchParams(hash.substring(1)).get('access_token')
+          const refreshToken = new URLSearchParams(hash.substring(1)).get('refresh_token')
+          const type = new URLSearchParams(hash.substring(1)).get('type')
+          
+          if (accessToken) {
+            // Réinitialiser l'URL pour ne pas garder les tokens visibles
+            window.history.replaceState({}, document.title, window.location.pathname)
+            
+            // Vérifier le type de redirection
+            if (type === 'signup') {
+              setVerificationMessage('Votre email a été vérifié avec succès! Vous pouvez maintenant vous connecter.')
+            } else if (type === 'recovery') {
+              setVerificationMessage('Vous pouvez maintenant réinitialiser votre mot de passe.')
+              setMode('forgot')
+            }
+            
+            // Essayer de se connecter automatiquement avec le token
+            const { data, error } = await supabase.auth.getUser(accessToken)
+            
+            if (data?.user && !error) {
+              // Rediriger vers le dashboard si la connexion est réussie
+              navigate('/dashboard')
+            }
+          }
+        } catch (err) {
+          console.error('Erreur lors du traitement du hash URL:', err)
+        } finally {
+          setLoading(false)
+        }
+      }
+    }
+    
+    handleHashChange()
+  }, [location, navigate, supabase.auth])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -144,8 +190,14 @@ const Login = () => {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow sm:rounded-lg sm:px-10">
           {error && (
-            <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+            <div className="p-4 mb-4 text-sm text-red-700 bg-red-100 rounded-lg">
               {error}
+            </div>
+          )}
+          
+          {verificationMessage && (
+            <div className="p-4 mb-4 text-sm text-green-700 bg-green-100 rounded-lg">
+              {verificationMessage}
             </div>
           )}
 
