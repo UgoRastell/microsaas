@@ -4,7 +4,15 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/" }
+  "routes": [
+    { "src": "/login", "dest": "/index.html" },
+    { "src": "/reset-password", "dest": "/index.html" },
+    { "src": "/dashboard", "dest": "/index.html" },
+    { "src": "/settings", "dest": "/index.html" },
+    { "src": "/customers", "dest": "/index.html" },
+    { "src": "/invoices", "dest": "/index.html" },
+    { "src": "/invoices/.*", "dest": "/index.html" },
+    { "handle": "filesystem" },
+    { "src": "/.*", "dest": "/index.html" }
   ]
 }
