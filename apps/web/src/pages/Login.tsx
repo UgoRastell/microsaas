@@ -18,31 +18,40 @@ const Login = () => {
 
   // Gérer les redirections Supabase pour la vérification d'email
   useEffect(() => {
-    // Vérifier si l'URL contient un hash avec un access_token (cas de vérification d'email)
-    const handleHashChange = async () => {
+    const handleHashBasedAuth = async () => {
+      setLoading(true)
       const hash = window.location.hash
-      if (hash && hash.includes('access_token')) {
-        setLoading(true)
+
+      try {
+        // Nouveau format: /#accesstoken/login
+        if (hash && hash.startsWith('#accesstoken')) {
+          setVerificationMessage('Votre email a été vérifié avec succès! Vous pouvez maintenant vous connecter.')
+          // Nettoyer l'URL
+          window.history.replaceState({}, document.title, window.location.pathname)
+          setLoading(false)
+          return
+        }
         
-        try {
-          // Extraire le token de l'URL
-          const accessToken = new URLSearchParams(hash.substring(1)).get('access_token')
-          const refreshToken = new URLSearchParams(hash.substring(1)).get('refresh_token')
-          const type = new URLSearchParams(hash.substring(1)).get('type')
+        // Format Supabase standard avec paramètres dans le hash
+        if (hash && hash.includes('access_token')) {
+          // Extraire les paramètres
+          const hashParams = new URLSearchParams(hash.substring(1))
+          const accessToken = hashParams.get('access_token')
+          const type = hashParams.get('type')
           
+          // Nettoyer l'URL pour sécurité
+          window.history.replaceState({}, document.title, window.location.pathname)
+          
+          // Vérifier le type de redirection
+          if (type === 'signup') {
+            setVerificationMessage('Votre email a été vérifié avec succès! Vous pouvez maintenant vous connecter.')
+          } else if (type === 'recovery') {
+            setVerificationMessage('Vous pouvez maintenant réinitialiser votre mot de passe.')
+            setMode('forgot')
+          }
+          
+          // Essayer de se connecter automatiquement si un token est présent
           if (accessToken) {
-            // Réinitialiser l'URL pour ne pas garder les tokens visibles
-            window.history.replaceState({}, document.title, window.location.pathname)
-            
-            // Vérifier le type de redirection
-            if (type === 'signup') {
-              setVerificationMessage('Votre email a été vérifié avec succès! Vous pouvez maintenant vous connecter.')
-            } else if (type === 'recovery') {
-              setVerificationMessage('Vous pouvez maintenant réinitialiser votre mot de passe.')
-              setMode('forgot')
-            }
-            
-            // Essayer de se connecter automatiquement avec le token
             const { data, error } = await supabase.auth.getUser(accessToken)
             
             if (data?.user && !error) {
@@ -50,16 +59,17 @@ const Login = () => {
               navigate('/dashboard')
             }
           }
-        } catch (err) {
-          console.error('Erreur lors du traitement du hash URL:', err)
-        } finally {
-          setLoading(false)
         }
+      } catch (err) {
+        console.error('Erreur lors du traitement du hash URL:', err)
+        setError('Erreur lors du traitement de l\'authentification')
+      } finally {
+        setLoading(false)
       }
     }
     
-    handleHashChange()
-  }, [location, navigate, supabase.auth])
+    handleHashBasedAuth()
+  }, [location, navigate, supabase.auth, setMode, setVerificationMessage, setError])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
